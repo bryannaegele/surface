@@ -83,10 +83,8 @@ defmodule Surface.Components.Dynamic.ComponentTest do
     use Surface.LiveView
 
     def render(assigns) do
-      module = Stateless
-
       ~F"""
-      <Component module={module} label="My label" class="myclass"/>
+      <Component module={Stateless} label="My label" class="myclass"/>
       """
     end
   end
@@ -95,10 +93,8 @@ defmodule Surface.Components.Dynamic.ComponentTest do
     use Surface.LiveView
 
     def render(assigns) do
-      module = PhoenixFunctionComponent
-
       ~F"""
-      <Component module={module} function={:show} label="My label" class="myclass"/>
+      <Component module={PhoenixFunctionComponent} function={:show} label="My label" class="myclass"/>
       """
     end
   end
@@ -163,10 +159,8 @@ defmodule Surface.Components.Dynamic.ComponentTest do
     use Surface.LiveView
 
     def render(assigns) do
-      module = StatelessWithId
-
       ~F"""
-      <Component module={module} id="my_id" />
+      <Component module={StatelessWithId} id="my_id" />
       """
     end
   end
@@ -411,87 +405,15 @@ defmodule Surface.Components.Dynamic.ComponentTest do
           """
         end
 
-      event = Phoenix.HTML.Engine.html_escape(~S([["push",{"event":"ok","target":"#comp"}]]))
+      doc = parse_document!(html)
 
-      assert html =~ """
-             <div phx-click="#{event}"></div>
-             """
-    end
-
-    test "at runtime, warn on unknown attributes with dynamic values at the component definition's file/line " do
-      file = Path.relative_to_cwd(__ENV__.file)
-      line = __ENV__.line + 8
-
-      output =
-        capture_io(:standard_error, fn ->
-          assigns = %{mod: ComponentWithEvent}
-
-          render_surface do
-            ~F"""
-            <Component
-              module={@mod}
-              unknown_attr={"123"}
-            />
-            """
-          end
-        end)
-
-      assert output =~ ~r"""
-             Unknown property "unknown_attr" for component <Surface.Components.Dynamic.ComponentTest.ComponentWithEvent>
-               #{file}:#{line}: Surface.Components.Dynamic.ComponentTest \(module\)\
-             """
-    end
-
-    test "at runtime, warn on unknown attributes as expr at the component definition's file/line " do
-      file = Path.relative_to_cwd(__ENV__.file)
-      line = __ENV__.line + 8
-
-      output =
-        capture_io(:standard_error, fn ->
-          assigns = %{mod: ComponentWithEvent, var: 123}
-
-          render_surface do
-            ~F"""
-            <Component
-              module={@mod}
-              unknown_attr={@var}
-            />
-            """
-          end
-        end)
-
-      assert output =~ ~r"""
-             Unknown property "unknown_attr" for component <Surface.Components.Dynamic.ComponentTest.ComponentWithEvent>
-               #{file}:#{line}: Surface.Components.Dynamic.ComponentTest \(module\)\
-             """
-    end
-
-    # TODO: When LV 0.18 is released, we should introduce a warning for LV >= 0.18
-    test "at runtime, does not warn on unknown attributes if module attr is a plain old phoenix component" do
-      output =
-        capture_io(:standard_error, fn ->
-          assigns = %{mod: PhoenixFunctionComponent, label: "My Label"}
-
-          render_surface do
-            ~F"""
-            <Component
-              module={@mod}
-              function={:show}
-              label={@label}
-              class="my-class"
-              unknown-attr="unknown-attr"
-            />
-            """
-          end
-        end)
-
-      assert output == ""
+      assert js_attribute(doc, "phx-click") == [["push", %{"event" => "ok", "target" => "#comp"}]]
     end
   end
 
   describe "dynamic components in dead views" do
     defmodule DeadView do
-      use Phoenix.View, root: "support/dead_views"
+      use Phoenix.Template, root: "support/dead_views"
       import Surface
       alias Surface.Components.Dynamic.Component
 
@@ -503,7 +425,7 @@ defmodule Surface.Components.Dynamic.ComponentTest do
     end
 
     test "renders dynamic components" do
-      assert Phoenix.View.render_to_string(DeadView, "index.html", []) =~
+      assert Phoenix.Template.render_to_string(DeadView, "index", "html", []) =~
                """
                <div><div class="myclass">
                  <span>My label</span>

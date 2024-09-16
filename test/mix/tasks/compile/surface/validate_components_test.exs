@@ -126,7 +126,7 @@ defmodule Mix.Tasks.Compile.Surface.ValidateComponentsTest do
   test "should return diagnostic when a directive is specified multiple times in a component" do
     component =
       quote do
-        ~F[<StringProp :if={true} :props={"a"} :props={"b"} />]
+        ~F[<StringProp :if={true} :if={false} />]
       end
       |> compile_surface()
 
@@ -138,7 +138,7 @@ defmodule Mix.Tasks.Compile.Surface.ValidateComponentsTest do
                details: nil,
                file: Path.expand("code"),
                message: ~S"""
-               the directive `props` has been passed multiple times. Considering only the last value.
+               the directive `if` has been passed multiple times. Considering only the last value.
 
                Hint: remove all redundant definitions.
                """,
@@ -222,11 +222,18 @@ defmodule Mix.Tasks.Compile.Surface.ValidateComponentsTest do
     use Surface.Component
 
     prop list, :list, required: true
+    data item, :any
+    data rest, :list
 
     def render(%{list: [item | rest]} = assigns) do
+      assigns =
+        assigns
+        |> assign(:item, item)
+        |> assign(:rest, rest)
+
       ~F"""
-      {item}
-      <Recursive list={rest} />
+      {@item}
+      <Recursive list={@rest} />
       """
     end
 

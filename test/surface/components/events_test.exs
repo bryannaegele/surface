@@ -8,10 +8,8 @@ defmodule Surface.Components.EventsTest do
     import Surface.Components.Utils, only: [events_to_opts: 1]
 
     def render(assigns) do
-      attrs = events_to_opts(assigns)
-
       ~F"""
-      <div :attrs={attrs} />
+      <div :attrs={events_to_opts(assigns)} />
       """
     end
 
@@ -46,6 +44,19 @@ defmodule Surface.Components.EventsTest do
 
     assert html =~ """
            <div phx-capture-click="my_click"></div>
+           """
+  end
+
+  test "click away event with parent live view as target" do
+    html =
+      render_surface do
+        ~F"""
+        <ComponentWithEvents click_away="my_click_away" />
+        """
+      end
+
+    assert html =~ """
+           <div phx-click-away="my_click_away"></div>
            """
   end
 
@@ -174,13 +185,9 @@ defmodule Surface.Components.EventsTest do
         """
       end
 
-    event = Phoenix.HTML.Engine.html_escape(~S([["push",{"event":"my_click","target":1}]]))
+    doc = parse_document!(html)
 
-    assert html =~ """
-           <div>
-             <div phx-click="#{event}"></div>
-           </div>
-           """
+    assert js_attribute(doc, "div > div", "phx-click") == [["push", %{"event" => "my_click", "target" => 1}]]
   end
 
   test "event with values" do
@@ -191,8 +198,11 @@ defmodule Surface.Components.EventsTest do
         """
       end
 
-    assert html =~ """
-           <div phx-value-foo="bar" phx-value-hello="world" phx-value-one="2" phx-click="my_click"></div>
-           """
+    # Assert: <div phx-click="my_click" phx-value-foo="bar" phx-value-hello="world" phx-value-one="2"></div>
+    doc = parse_document!(html)
+    assert attribute(doc, "phx-click") == ["my_click"]
+    assert attribute(doc, "phx-value-foo") == ["bar"]
+    assert attribute(doc, "phx-value-hello") == ["world"]
+    assert attribute(doc, "phx-value-one") == ["2"]
   end
 end

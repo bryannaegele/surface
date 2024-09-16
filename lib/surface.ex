@@ -109,20 +109,76 @@ defmodule Surface do
     indentation = meta[:indentation] || 0
     column = meta[:column] || 1
 
-    caller_is_surface_component =
-      Module.open?(__CALLER__.module) &&
-        Module.get_attribute(__CALLER__.module, :component_type) != nil
+    component_type = Module.get_attribute(__CALLER__.module, :component_type)
 
     string
     |> Surface.Compiler.compile(line, __CALLER__, __CALLER__.file,
-      checks: [no_undefined_assigns: caller_is_surface_component],
+      checks: [no_undefined_assigns: component_type != nil],
       indentation: indentation,
       column: column
     )
     |> Surface.Compiler.to_live_struct(
       debug: Enum.member?(opts, ?d),
       file: __CALLER__.file,
-      line: line
+      line: line,
+      caller: __CALLER__,
+      annotate_content: annotate_content()
+    )
+  end
+
+  @doc """
+  Embeds an `.sface` template as a function component.
+
+  ## Example
+
+      defmodule MyAppWeb.Layouts do
+        use MyAppWeb, :html
+
+        embed_sface "layouts/root.sface"
+        embed_sface "layouts/app.sface"
+      end
+
+  The code above generates two functions, `root` and `app`. You can use both
+  as regular function components or as layout templates.
+  """
+  defmacro embed_sface(relative_file) do
+    file =
+      __CALLER__.file
+      |> Path.dirname()
+      |> Path.join(relative_file)
+
+    if File.exists?(file) do
+      name = file |> Path.rootname() |> Path.basename()
+
+      quote bind_quoted: [file: file, name: name] do
+        @external_resource file
+        @file file
+
+        body = Surface.__compile_sface__(name, file, __ENV__)
+
+        def unquote(String.to_atom(name))(var!(assigns)) do
+          _ = var!(assigns)
+          unquote(body)
+        end
+      end
+    else
+      message = """
+      could not read template "#{relative_file}": no such file or directory. \
+      Trying to read file "#{file}".
+      """
+
+      IOHelper.compile_error(message, __CALLER__.file, __CALLER__.line)
+    end
+  end
+
+  @doc false
+  def __compile_sface__(name, file, env) do
+    file
+    |> File.read!()
+    |> Surface.Compiler.compile(1, env, file)
+    |> Surface.Compiler.to_live_struct(
+      caller: %Macro.Env{env | file: file, line: 1, function: {String.to_atom(name), 1}},
+      annotate_content: annotate_content()
     )
   end
 
@@ -131,7 +187,7 @@ defmodule Surface do
 
   The code must be passed with the `do` block using the `~F` sigil.
 
-  Optional `line` and `file` metadata can be passed using `opts`.
+  Optional `line`, `file` and `caller` metadata can be passed using `opts`.
 
   ## Example
 
@@ -161,10 +217,11 @@ defmodule Surface do
 
     line = Keyword.get(opts, :line, default_line)
     file = Keyword.get(opts, :file, __CALLER__.file)
+    caller = Keyword.get(opts, :caller, quote(do: __ENV__))
     indentation = Keyword.get(string_meta, :indentation, 0)
 
     quote do
-      Surface.Compiler.compile(unquote(code), unquote(line), __ENV__, unquote(file),
+      Surface.Compiler.compile(unquote(code), unquote(line), unquote(var!(caller)), unquote(file),
         checks: [no_undefined_assigns: false],
         indentation: unquote(indentation),
         column: 1,
@@ -218,13 +275,13 @@ defmodule Surface do
         app in [:surface, project_app] or :surface in deps_apps,
         {dir, files} = app_beams_dir_and_files(app),
         file <- files,
-        List.starts_with?(file, 'Elixir.') do
+        List.starts_with?(file, ~c"Elixir.") do
       :filename.join(dir, file)
     end
     |> Enum.chunk_every(50)
     |> Task.async_stream(fn files ->
       for file <- files,
-          {:ok, {_, [{_, chunk} | _]}} = :beam_lib.chunks(file, ['Attr']),
+          {:ok, {_, [{_, chunk} | _]}} = :beam_lib.chunks(file, [~c"Attr"]),
           chunk |> :erlang.binary_to_term() |> Keyword.get(:component_type) do
         file |> Path.basename(".beam") |> String.to_atom()
       end
@@ -438,5 +495,11 @@ defmodule Surface do
       root_prop ->
         {root_prop.name, value}
     end
+  end
+
+  defp annotate_content do
+    Code.ensure_loaded?(Phoenix.LiveView.HTMLEngine) &&
+      function_exported?(Phoenix.LiveView.HTMLEngine, :annotate_body, 1) &&
+      (&Phoenix.LiveView.HTMLEngine.annotate_body/1)
   end
 end

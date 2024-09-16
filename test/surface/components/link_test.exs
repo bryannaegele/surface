@@ -136,15 +136,15 @@ defmodule Surface.Components.LinkTest do
     end
 
     test "link with %URI{}" do
-      url = "https://surface-ui.org/"
+      assigns = %{url: "https://surface-ui.org/"}
 
-      assert render_surface(do: ~F[<Link label="elixir" to={url} />]) ==
-               render_surface(do: ~F[<Link label="elixir" to={URI.parse(url)} />])
+      assert render_surface(do: ~F[<Link label="elixir" to={@url} />]) ==
+               render_surface(do: ~F[<Link label="elixir" to={URI.parse(@url)} />])
 
-      path = "/surface"
+      assigns = %{path: "/surface"}
 
-      assert render_surface(do: ~F[<Link label="elixir" to={path} />]) ==
-               render_surface(do: ~F[<Link label="elixir" to={URI.parse(path)} />])
+      assert render_surface(do: ~F[<Link label="elixir" to={@path} />]) ==
+               render_surface(do: ~F[<Link label="elixir" to={URI.parse(@path)} />])
     end
 
     test "link with put/delete" do
@@ -171,23 +171,6 @@ defmodule Surface.Components.LinkTest do
 
       assert html =~
                ~s[<a data-method="put" data-to="/world" rel="nofollow" href="/world">hello</a>]
-    end
-
-    test "link with :do contents" do
-      html =
-        render_surface do
-          ~F"""
-          <Link to="/hello">
-            {Phoenix.HTML.Tag.content_tag(:p, "world")}
-          </Link>
-          """
-        end
-
-      assert html == """
-             <a href="/hello">
-               <p>world</p>
-             </a>
-             """
     end
 
     test "link with scheme" do

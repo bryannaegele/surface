@@ -1,17 +1,17 @@
 defmodule Mix.Tasks.Surface.Init.IntegrationTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
   @moduletag :integration
 
   alias Mix.Tasks.Surface.Init.FilePatchers
+
+  @phx_new_version "1.7.10"
 
   setup_all do
     {template_status, template_project_folder} = build_test_project_template("surface_init_test")
     project_folder_patched = "#{template_project_folder}_patched"
     project_folder_unpatched = "#{template_project_folder}_unpatched"
 
-    build_project_from_template(template_status, template_project_folder, project_folder_unpatched,
-      on_change: &compile/1
-    )
+    build_project_from_template(:created, template_project_folder, project_folder_unpatched, on_change: &compile/1)
 
     build_project_from_template(template_status, template_project_folder, project_folder_patched,
       on_create: &surface_init_all/1,
@@ -26,18 +26,21 @@ defmodule Mix.Tasks.Surface.Init.IntegrationTest do
 
     output =
       cmd(
-        "mix surface.init --catalogue --demo --layouts --tailwind --yes --no-install --dry-run --web-module SurfaceInitTestWeb",
+        "mix surface.init --catalogue --demo --layouts --yes --no-install --web-module SurfaceInitTestWeb",
         opts
       )
 
-    assert output == """
+    assert output =~ """
            * patching .formatter.exs
            * patching .gitignore
+           * patching Dockerfile
            * patching assets/css/app.css
            * patching assets/js/app.js
+           * patching assets/tailwind.config.js
            * patching config/config.exs
            * patching config/dev.exs
            * patching lib/surface_init_test_web.ex
+           * patching lib/surface_init_test_web/components/layouts.ex
            * patching lib/surface_init_test_web/router.ex
            * patching mix.exs
            * creating lib/surface_init_test_web/components/card.ex
@@ -45,20 +48,17 @@ defmodule Mix.Tasks.Surface.Init.IntegrationTest do
            * creating lib/surface_init_test_web/live/demo.ex
            * creating priv/catalogue/surface_init_test_web/components/card_examples.ex
            * creating priv/catalogue/surface_init_test_web/components/card_playground.ex
-           * deleting assets/css/phoenix.css
-           * creating assets/tailwind.config.js
-           * creating lib/surface_init_test_web/templates/page/index.sface
-           * deleting lib/surface_init_test_web/templates/page/index.html.heex
-           * creating lib/surface_init_test_web/templates/layout/app.sface
-           * deleting lib/surface_init_test_web/templates/layout/app.html.heex
-           * creating lib/surface_init_test_web/templates/layout/live.sface
-           * deleting lib/surface_init_test_web/templates/layout/live.html.heex
-           * creating lib/surface_init_test_web/templates/layout/root.sface
-           * deleting lib/surface_init_test_web/templates/layout/root.html.heex
+           * creating lib/surface_init_test_web/components/layouts/app.sface
+           * deleting lib/surface_init_test_web/components/layouts/app.html.heex
+           * creating lib/surface_init_test_web/components/layouts/root.sface
+           * deleting lib/surface_init_test_web/components/layouts/root.html.heex
 
-           Finished running 41 patches for 24 files.
-           41 changes applied, 0 skipped.
+           Finished running 31 patches for 21 files.
+           31 changes applied, 0 skipped.
            """
+
+    compile(project_folder, warnings_as_errors: true)
+    cmd("mix test --warnings-as-errors", opts)
   end
 
   test "surfice.init on an already patched project applies no changes", %{project_folder_patched: project_folder} do
@@ -66,18 +66,21 @@ defmodule Mix.Tasks.Surface.Init.IntegrationTest do
 
     output =
       cmd(
-        "mix surface.init --catalogue --demo --layouts --tailwind --yes --no-install --dry-run --web-module SurfaceInitTestWeb",
+        "mix surface.init --catalogue --demo --layouts --yes --no-install --dry-run --web-module SurfaceInitTestWeb",
         opts
       )
 
-    assert compact_output(output) == """
+    assert compact_output(output) =~ """
            * patching .formatter.exs (skipped)
            * patching .gitignore (skipped)
+           * patching Dockerfile (skipped)
            * patching assets/css/app.css (skipped)
            * patching assets/js/app.js (skipped)
+           * patching assets/tailwind.config.js (skipped)
            * patching config/config.exs (skipped)
            * patching config/dev.exs (skipped)
            * patching lib/surface_init_test_web.ex (skipped)
+           * patching lib/surface_init_test_web/components/layouts.ex (skipped)
            * patching lib/surface_init_test_web/router.ex (skipped)
            * patching mix.exs (skipped)
            * creating lib/surface_init_test_web/components/card.ex (skipped)
@@ -85,19 +88,13 @@ defmodule Mix.Tasks.Surface.Init.IntegrationTest do
            * creating lib/surface_init_test_web/live/demo.ex (skipped)
            * creating priv/catalogue/surface_init_test_web/components/card_examples.ex (skipped)
            * creating priv/catalogue/surface_init_test_web/components/card_playground.ex (skipped)
-           * deleting assets/css/phoenix.css (skipped)
-           * creating assets/tailwind.config.js (skipped)
-           * creating lib/surface_init_test_web/templates/page/index.sface (skipped)
-           * deleting lib/surface_init_test_web/templates/page/index.html.heex (skipped)
-           * creating lib/surface_init_test_web/templates/layout/app.sface (skipped)
-           * deleting lib/surface_init_test_web/templates/layout/app.html.heex (skipped)
-           * creating lib/surface_init_test_web/templates/layout/live.sface (skipped)
-           * deleting lib/surface_init_test_web/templates/layout/live.html.heex (skipped)
-           * creating lib/surface_init_test_web/templates/layout/root.sface (skipped)
-           * deleting lib/surface_init_test_web/templates/layout/root.html.heex (skipped)
+           * creating lib/surface_init_test_web/components/layouts/app.sface (skipped)
+           * deleting lib/surface_init_test_web/components/layouts/app.html.heex (skipped)
+           * creating lib/surface_init_test_web/components/layouts/root.sface (skipped)
+           * deleting lib/surface_init_test_web/components/layouts/root.html.heex (skipped)
 
-           Finished running 41 patches for 24 files.
-           0 changes applied, 41 skipped.
+           Finished running 31 patches for 21 files.
+           0 changes applied, 31 skipped.
            It looks like this project has already been patched.
            """
   end
@@ -107,6 +104,22 @@ defmodule Mix.Tasks.Surface.Init.IntegrationTest do
       name: "Add `surface` dependency",
       patch: &FilePatchers.MixExs.add_dep(&1, ":surface", ~s(path: "#{File.cwd!()}", override: true)),
       instructions: ""
+    }
+  end
+
+  # TODO: Remove this patch whenever phx.new starts generating the project
+  # without warnings related to API changes in Gettext v0.26.
+  def replace_gettext_in_mix_deps do
+    %{
+      name: "Replace `gettext` dependency",
+      instructions: "",
+      patch:
+        &FilePatchers.Text.replace_text(
+          &1,
+          ~s({:gettext, "~> 0.20"}),
+          ~s({:gettext, "~> 0.25.0"}),
+          ~s({:gettext, "~> 0.25.0"})
+        )
     }
   end
 
@@ -126,7 +139,7 @@ defmodule Mix.Tasks.Surface.Init.IntegrationTest do
 
     project_folder = Path.join(System.tmp_dir!(), project_name)
     project_exists? = File.exists?(project_folder)
-    surface_phx_new_version = Application.spec(:phx_new, :vsn) |> to_string()
+    surface_phx_new_version = @phx_new_version
     project_phx_new_version_file = Path.join(project_folder, ".phx_new_version")
 
     project_phx_new_version =
@@ -146,18 +159,23 @@ defmodule Mix.Tasks.Surface.Init.IntegrationTest do
 
       Mix.shell().info([:green, "* creating ", :reset, project_folder])
       File.rm_rf!(project_folder)
-      cmd("mix phx.new #{project_folder} --no-ecto --no-dashboard --no-mailer --install")
+      phx_new(project_folder)
 
       File.write!(project_phx_new_version_file, surface_phx_new_version)
 
-      project_folder
-      |> Path.join("mix.exs")
-      |> Mix.Tasks.Surface.Init.Patcher.patch_file([add_surface_to_mix_deps()], %{dry_run: false})
+      mix_file = Path.join(project_folder, "mix.exs")
+
+      Mix.Tasks.Surface.Init.Patcher.patch_file(
+        mix_file,
+        [add_surface_to_mix_deps(), replace_gettext_in_mix_deps()],
+        %{dry_run: false}
+      )
 
       cmd("mix deps.get", cd: project_folder)
+      cmd("mix phx.gen.release --docker", cd: project_folder)
     end
 
-    compile_output = cmd("mix compile", cd: project_folder)
+    compile_output = cmd("mix compile --warnings-as-errors", cd: project_folder)
     compiled? = String.contains?(compile_output, "Compiling")
 
     status =
@@ -186,23 +204,45 @@ defmodule Mix.Tasks.Surface.Init.IntegrationTest do
     end
   end
 
-  defp cmd(str_cmd, opts \\ []) do
-    [cmd | args] = String.split(str_cmd)
+  defp phx_new(project_folder) do
+    phx_new_script =
+      """
+      Mix.install([{:phx_new, "#{@phx_new_version}"}])
+      Mix.Task.run("phx.new", ["#{project_folder}", "--no-ecto", "--no-dashboard", "--no-mailer", "--no-install"])
+      """
 
+    cmd("elixir", ["--eval", phx_new_script])
+  end
+
+  defp cmd(str_cmd, opts) do
+    if Keyword.keyword?(opts) do
+      [cmd | args] = String.split(str_cmd)
+      cmd(cmd, args, opts)
+    else
+      cmd(str_cmd, opts, [])
+    end
+  end
+
+  defp cmd(cmd, args, opts) do
     case System.cmd(cmd, args, opts) do
       {result, 0} ->
         result
 
       {result, code} ->
         Mix.shell().info([:red, "exit with code ", code, ", output: \n", :reset, result])
-        raise "command `#{str_cmd}` failed"
+        raise "command `#{cmd} #{args}` failed"
     end
   end
 
-  defp compile(project_folder) do
+  defp compile(project_folder, opts \\ []) do
     Mix.shell().info([:green, "* compiling ", :reset, project_folder])
     cmd("mix deps.get", cd: project_folder)
-    cmd("mix compile", cd: project_folder)
+
+    if opts[:warnings_as_errors] do
+      cmd("mix compile --warnings-as-errors", cd: project_folder)
+    else
+      cmd("mix compile", cd: project_folder)
+    end
   end
 
   defp restore(project_folder) do
@@ -213,7 +253,7 @@ defmodule Mix.Tasks.Surface.Init.IntegrationTest do
   defp surface_init_all(project_folder) do
     restore(project_folder)
     Mix.shell().info([:green, "* patching ", :reset, project_folder])
-    cmd("mix surface.init --catalogue --demo --layouts --tailwind --yes --no-install", cd: project_folder)
+    cmd("mix surface.init --catalogue --demo --layouts --yes --no-install", cd: project_folder)
     compile(project_folder)
   end
 end

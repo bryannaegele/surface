@@ -1,3 +1,9 @@
+# Borrowed solution from phoenix_live_view test_helper.exs
+# https://github.com/phoenixframework/phoenix_live_view/blob/main/test/test_helper.exs#L4
+Application.put_env(:phoenix_live_view, :debug_heex_annotations, true)
+Code.require_file("test/support/debug_annotations.exs")
+Application.put_env(:phoenix_live_view, :debug_heex_annotations, false)
+
 ExUnit.start()
 ExUnit.configure(exclude: [integration: true])
 
@@ -8,6 +14,31 @@ end
 defmodule Endpoint do
   use Phoenix.Endpoint, otp_app: :surface
   plug(Router)
+end
+
+defmodule FlokiHelpers do
+  import Floki
+
+  def js_attribute(html, selector, attribute_name) do
+    html
+    |> attribute(selector, attribute_name)
+    |> decode_js()
+  end
+
+  def js_attribute(html, attribute_name) do
+    html
+    |> attribute(attribute_name)
+    |> decode_js()
+  end
+
+  defp decode_js([]) do
+    nil
+  end
+
+  defp decode_js([value]) do
+    value
+    |> Jason.decode!()
+  end
 end
 
 Application.put_env(:surface, Endpoint,

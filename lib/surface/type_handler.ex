@@ -177,7 +177,12 @@ defmodule Surface.TypeHandler do
         {:ok, [~S( ), to_string(name)]}
 
       {:ok, val} ->
-        {:ok, Phoenix.HTML.Tag.attributes_escape([{name, val}])}
+        attr_value =
+          [{name, val}]
+          |> Phoenix.HTML.attributes_escape()
+          |> Phoenix.HTML.safe_to_string()
+
+        {:ok, attr_value}
 
       {:error, message} ->
         {:error, message}
@@ -287,25 +292,12 @@ defmodule Surface.TypeHandler do
     {:string, []}
   end
 
-  def attribute_type_and_opts(module, name, meta) do
+  def attribute_type_and_opts(module, name, _meta) do
     with true <- function_exported?(module, :__get_prop__, 1),
          prop when not is_nil(prop) <- module.__get_prop__(name) do
       {prop.type, prop.opts}
     else
-      # The module is not loaded or it's a plain old phoenix (live) component
-      false ->
-        {:string, []}
-
       _ ->
-        if Map.get(meta, :runtime, false) do
-          IOHelper.warn(
-            "Unknown property \"#{to_string(name)}\" for component <#{meta.node_alias}>",
-            meta.caller,
-            meta.file,
-            meta.line
-          )
-        end
-
         {:string, []}
     end
   end

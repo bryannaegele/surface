@@ -6,7 +6,8 @@ defmodule Surface.Compiler.Helpers do
 
   @builtin_common_assigns [
     :__context__,
-    :__caller_scope_id__
+    :__caller_scope_id__,
+    :streams
   ]
 
   @builtin_component_assigns [:inner_block] ++ @builtin_common_assigns
@@ -21,6 +22,8 @@ defmodule Surface.Compiler.Helpers do
     Surface.LiveComponent => @builtin_live_component_assigns,
     Surface.LiveView => @builtin_live_view_assigns
   }
+
+  @env Mix.env()
 
   def builtin_assigns_by_type(type) do
     @builtin_assigns_by_type[type]
@@ -102,14 +105,15 @@ defmodule Surface.Compiler.Helpers do
     assigns
   end
 
-  def to_meta(tree_meta, %CompileMeta{caller: caller, checks: checks, style: style}) do
+  def to_meta(tree_meta, %CompileMeta{caller: caller, checks: checks, style: style, caller_spec: caller_spec}) do
     %AST.Meta{
       line: tree_meta.line,
       column: tree_meta.column,
       file: tree_meta.file,
       caller: caller,
       checks: checks,
-      style: style
+      style: style,
+      caller_spec: caller_spec
     }
   end
 
@@ -141,7 +145,7 @@ defmodule Surface.Compiler.Helpers do
     "#{plural} #{rest |> Enum.reverse() |> Enum.join(", ")} and #{last}"
   end
 
-  @blanks ' \n\r\t\v\b\f\e\d\a'
+  @blanks ~c" \n\r\t\v\b\f\e\d\a"
 
   def blank?([]), do: true
 
@@ -207,8 +211,9 @@ defmodule Surface.Compiler.Helpers do
     end
   end
 
+  # TODO: remove this function and use the `caller_spec` field on the `CompileMeta` struct instead
   def get_module_attribute(module, key, default) do
-    if Mix.env() == :test do
+    if @env == :test do
       # If the template is compiled directly in a test module, get_attribute might fail,
       # breaking some of the tests once in a while.
       try do

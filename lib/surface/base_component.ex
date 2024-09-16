@@ -19,6 +19,8 @@ defmodule Surface.BaseComponent do
 
   @optional_callbacks transform: 1
 
+  # We're keeping this here to make the migration easier it will be removed when we remove
+  # scope-aware context.
   @default_propagate_context_to_slots_map %{
     {Surface.Components.Form, :render} => true,
     {Surface.Components.Form.Field, :render} => true,
@@ -40,13 +42,12 @@ defmodule Surface.BaseComponent do
         css_file
         |> File.read!()
         |> Surface.Compiler.CSSTranslator.translate!(
-          module: __CALLER__.module,
-          func: :render,
           file: css_file,
-          line: 1
+          line: 1,
+          scope: __CALLER__.module
         )
 
-      Module.put_attribute(__CALLER__.module, :__style__, {:render, style})
+      Module.put_attribute(__CALLER__.module, :__style__, {:__module__, style})
     end
 
     quote do
@@ -96,25 +97,6 @@ defmodule Surface.BaseComponent do
           Map.put(acc, component, propagate_context_to_slots)
       end
     end)
-  end
-
-  @doc false
-  def restore_private_assigns(socket, assigns) do
-    socket =
-      if Map.has_key?(assigns, :__context__) do
-        Phoenix.Component.assign(socket, :__context__, assigns[:__context__])
-      else
-        socket
-      end
-
-    socket =
-      if Map.has_key?(assigns, :__caller_scope_id__) do
-        Phoenix.Component.assign(socket, :__caller_scope_id__, assigns[:__caller_scope_id__])
-      else
-        socket
-      end
-
-    socket
   end
 
   defmacro __before_compile__(env) do

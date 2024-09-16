@@ -1,5 +1,14 @@
 defmodule Surface.Components.Context do
   @moduledoc """
+  > #### Soft deprecation warning {: .warning}
+  >
+  > Using this module as a component with `<Context>` has been deprecated. Support for
+  > scope-aware context will be removed in `v0.13` due to the lack of built-in support for
+  > the feature in Liveview itself, which leads to inefficient diff-tracking when using it.
+  >
+  > Global context related functions like `Context.put/3` and `Context.get/3`, as well as the `:from_context`
+  > option, will be kept and recommended as their usage don't affect diff-tracking negatively.
+
   A built-in module and component that allows users to set and retrieve values
   to/from the context.
   """
@@ -140,8 +149,9 @@ defmodule Surface.Components.Context do
 
   Without scope:
 
-      Context.put=(key1: @value1, key2: "some other value")
+      Context.put(key1: @value1, key2: "some other value")
 
+  > **Note**: Whenever using `Context.put/3` inside the [`update/2`](`c:Phoenix.LiveComponent.update/2`) callback, make sure you call it passing the `socket`, not the `assigns`.
   """
   def put(socket_or_assigns, scope \\ nil, values)
 
@@ -187,6 +197,8 @@ defmodule Surface.Components.Context do
       ~F"\""
       <MyTextInput form={form} field={field} />
       "\""
+
+  > **Note**: Whenever using `Context.get/3` inside the [`update/2`](`c:Phoenix.LiveComponent.update/2`) callback, make sure you call it passing the `socket`, not the `assigns`.
   """
   def get(socket_or_assigns, scope \\ nil, key)
 

@@ -3,7 +3,7 @@
 [![Build Status](https://github.com/surface-ui/surface/workflows/CI/badge.svg)](https://github.com/surface-ui/surface/actions?query=workflow%3A%22CI%22)
 
 Surface is a **server-side rendering** component library that allows developers to
-build **rich interactive user-interfaces**, writing minimal custom Javascript.
+build **rich interactive user-interfaces**, writing minimal custom JavaScript.
 
 Built on top of [Phoenix LiveView](https://hexdocs.pm/phoenix_live_view/) and its component API,
 Surface leverages the amazing Phoenix Framework to provide a **fast** and **productive** solution
@@ -11,7 +11,7 @@ to build modern web applications.
 
 Full documentation and live examples can be found at [surface-ui.org](https://surface-ui.org).
 
-### Example
+## Example
 
 ```elixir
 # Defining the component
@@ -44,26 +44,26 @@ end
 
 ## Features
 
-  * **An HTML-centric** templating language, designed specifically to improve development experience.
+* **An HTML-centric** templating language, designed specifically to improve development experience.
 
-  * **Components as modules** - they can be stateless, stateful, renderless or compile-time.
+* **Components as modules** - they can be stateless, stateful, renderless or compile-time.
 
-  * **Declarative properties** - explicitly declare the inputs (properties and events) of each component.
+* **Declarative properties** - explicitly declare the inputs (properties and events) of each component.
 
-  * **Slots** - placeholders declared by a component that you can fill up with **custom content**.
+* **Slots** - placeholders declared by a component that you can fill up with **custom content**.
 
-  * **Contexts** - allows a parent component to share data with its children without passing them as properties.
+* **Contexts** - allows a parent component to share data with its children without passing them as properties.
 
-  * **Compile-time checking** of the template structure, components' properties, slots, events and more.
+* **Compile-time checking** of the template structure, components' properties, slots, events and more.
 
-  * **Integration with editor/tools** for warnings/errors, syntax highlighting, jump-to-definition,
+* **Integration with editor/tools** for warnings/errors, syntax highlighting, jump-to-definition,
     auto-completion (soon!) and more.
 
 ## Installation
 
-Phoenix v1.6 comes with built-in support for LiveView apps. You can create a new phoenix application with:
+Phoenix v1.7 comes with built-in support for LiveView apps. You can create a new phoenix application with:
 
-```
+```bash
 mix phx.new my_app
 ```
 
@@ -76,7 +76,7 @@ Add `surface` to the list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:surface, "~> 0.9.0"}
+    {:surface, "~> 0.11.0"}
   ]
 end
 ```
@@ -95,21 +95,21 @@ for your project using the `--catalogue` option. The catalogue will be available
 > **Note:** When using the `--demo` and `--catalogue` options together, the task also generates two
 > catalogue examples and a playground for the sample component.
 
-```
+```bash
 mix surface.init --demo --catalogue
 ```
 
 Start the Phoenix server with:
 
-```
+```bash
 mix phx.server
 ```
 
-That's it! You can now access your application at http://localhost:4000.
+That's it! You can now access your application at <http://localhost:4000>.
 
 You can see the full list of options provided by `surface.init` by running:
 
-```
+```bash
 mix help surface.init
 ```
 
@@ -122,8 +122,8 @@ Please see the [Migration Guide](MIGRATING.md) for details.
 
 ## Tooling
 
-  * [Surface Formatter](https://github.com/surface-ui/surface_formatter) - A code formatter for Surface.
-  * [Surface package for VS Code](https://marketplace.visualstudio.com/items?itemName=msaraiva.surface) - Syntax highlighting support for Surface/Elixir.
+* [Surface Formatter](https://github.com/surface-ui/surface_formatter) - A code formatter for Surface.
+* [Surface package for VS Code](https://marketplace.visualstudio.com/items?itemName=msaraiva.surface) - Syntax highlighting support for Surface/Elixir.
 
 ## License
 

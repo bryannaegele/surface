@@ -126,6 +126,42 @@ defmodule Surface.APITest do
     assert_raise(CompileError, message, fn -> eval(code, "LiveView") end)
   end
 
+  test "validate :css_variant type + options" do
+    # type :boolean
+    code = "prop field, :boolean, css_variant: true"
+    assert {:ok, _} = eval(code)
+
+    # type :list
+    code = "prop field, :list, css_variant: true"
+    assert {:ok, _} = eval(code)
+
+    # other types with :values
+    code = "prop field, :string, values: [:a, :b], css_variant: true"
+    assert {:ok, _} = eval(code)
+
+    # other types with :values!
+    code = "prop field, :string, values!: [:a, :b], css_variant: true"
+    assert {:ok, _} = eval(code)
+
+    # invalid value
+    code = "prop field, :string, css_variant: 123"
+
+    message = """
+    code:4: invalid value for :css_variant. Expected either a boolean or a keyword list of options, got: 123.
+
+    Valid options for type :string are:
+
+      * :not_nil - the name of the variant when the value is not `nil`. Default is the assign name.
+      * :nil - the name of the variant when the value is `nil`. Default is `no-[assign-name]`.
+
+    or, if you use the `values` or `values!` options:
+
+      * :prefix - the prefix of the variant name for each value listed in `values` or `values!`. Default is `[assign-name]-`.
+    """
+
+    assert_raise(CompileError, message, fn -> eval(code) end)
+  end
+
   test "validate duplicate assigns" do
     code = """
     prop label, :string
@@ -365,7 +401,7 @@ defmodule Surface.APITest do
       code = "prop label, :string, a: 1"
 
       message =
-        ~r/unknown option :a. Available options: \[:required, :default, :values, :values!, :accumulate, :root, :static, :from_context\]/
+        ~r/unknown option :a. Available options: \[:required, :default, :values, :values!, :accumulate, :root, :static, :from_context, :css_variant\]/
 
       assert_raise(CompileError, message, fn ->
         eval(code)
@@ -467,7 +503,9 @@ defmodule Surface.APITest do
 
     test "validate unknown type options" do
       code = "data label, :string, a: 1"
-      message = ~r/unknown option :a. Available options: \[:default, :values, :values!, :from_context\]/
+
+      message =
+        ~r/unknown option :a. Available options: \[:default, :values, :values!, :from_context, :css_variant\]/
 
       assert_raise(CompileError, message, fn ->
         eval(code)
@@ -741,37 +779,77 @@ defmodule Surface.APISyncTest do
              """
     end
 
-    test "do not validate required slots of non-existing components" do
-      id = :erlang.unique_integer([:positive]) |> to_string()
-      module = "TestComponentWithRequiredDefaultSlot_#{id}"
+    if Version.match?(System.version(), ">= 1.15.0") do
+      test "do not validate required slots of non-existing components" do
+        id = :erlang.unique_integer([:positive]) |> to_string()
+        module = "TestComponentWithRequiredDefaultSlot_#{id}"
 
-      code = """
-      defmodule #{module} do
-        use Surface.Component
+        code = """
+        defmodule #{module} do
+          use Surface.Component
 
-        def render(assigns) do
-          ~F"\""
-          <ComponentWithRequiredDefaultSlot>
-            <NonExisting>
-              Don't validate me!
-            </NonExisting>
-          </ComponentWithRequiredDefaultSlot>
-          "\""
+          def render(assigns) do
+            ~F"\""
+            <ComponentWithRequiredDefaultSlot>
+              <NonExisting>
+                Don't validate me!
+              </NonExisting>
+            </ComponentWithRequiredDefaultSlot>
+            "\""
+          end
         end
-      end
-      """
+        """
 
-      error_message = "code.exs:7: module NonExisting is not loaded and could not be found"
-
-      output =
-        capture_io(:standard_error, fn ->
-          assert_raise(CompileError, error_message, fn ->
-            {{:module, _, _, _}, _} = Code.eval_string(code, [], %{__ENV__ | file: "code.exs", line: 1})
+        diagnostics =
+          Code.with_diagnostics(fn ->
+            try do
+              Code.eval_string(code, [], %{__ENV__ | file: "code.exs", line: 1})
+            rescue
+              e -> e
+            end
           end)
-        end)
 
-      assert output =~ ~r"cannot render <NonExisting> \(module NonExisting could not be loaded\)"
-      assert output =~ ~r"  code.exs:7:"
+        assert {%CompileError{},
+                [
+                  %{message: "cannot render <NonExisting> (module NonExisting could not be loaded)" <> _},
+                  %{message: "module NonExisting is not loaded and could not be found"}
+                ]} = diagnostics
+      end
+    else
+      # Remove this test (and the `if`) whenever we drop support for Elixir < 1.15
+      test "do not validate required slots of non-existing components" do
+        id = :erlang.unique_integer([:positive]) |> to_string()
+        module = "TestComponentWithRequiredDefaultSlot_#{id}"
+
+        code = """
+        defmodule #{module} do
+          use Surface.Component
+
+          def render(assigns) do
+            ~F"\""
+            <ComponentWithRequiredDefaultSlot>
+              <NonExisting>
+                Don't validate me!
+              </NonExisting>
+            </ComponentWithRequiredDefaultSlot>
+            "\""
+          end
+        end
+        """
+
+        error_message = "code.exs:7: module NonExisting is not loaded and could not be found"
+
+        output =
+          capture_io(:standard_error, fn ->
+            assert_raise(CompileError, error_message, fn ->
+              {{:module, _, _, _}, _} =
+                Code.eval_string(code, [], %{__ENV__ | file: "code.exs", line: 1}) |> IO.inspect()
+            end)
+          end)
+
+        assert output =~ ~r"cannot render <NonExisting> \(module NonExisting could not be loaded\)"
+        assert output =~ ~r"  code.exs:7:"
+      end
     end
   end
 end

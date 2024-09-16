@@ -10,7 +10,8 @@ defmodule Surface.Components.ContextTest do
   register_propagate_context_to_slots([
     __MODULE__.Outer,
     __MODULE__.OuterUsingPropContextPut,
-    __MODULE__.OuterWithNamedSlots
+    __MODULE__.OuterWithNamedSlots,
+    __MODULE__.LiveComponentGetFromContextWithUpdate
   ])
 
   defmodule Outer do
@@ -94,22 +95,6 @@ defmodule Surface.Components.ContextTest do
           <#slot {slot} />
         </span>
       </Context>
-      """
-    end
-  end
-
-  defmodule InputsWithNestedField do
-    use Surface.Component
-
-    alias Surface.Components.Form.{Inputs, Field, TextInput}
-
-    def render(assigns) do
-      ~F"""
-      <Inputs for={:children}>
-        <Field name={:name}>
-          <TextInput/>
-        </Field>
-      </Inputs>
       """
     end
   end
@@ -260,7 +245,12 @@ defmodule Surface.Components.ContextTest do
           String.upcase(assigns.data_without_scope || "")
         ]
 
-        {:ok, assign(socket, :computed_value, computed_value)}
+        socket =
+          socket
+          |> assign(assigns)
+          |> assign(:computed_value, computed_value)
+
+        {:ok, socket}
       end
 
       @impl true
@@ -277,7 +267,7 @@ defmodule Surface.Components.ContextTest do
       end
     end
 
-    test "use a value from the context as default value" do
+    test "use a value from the context if the related prop is not given" do
       html =
         render_surface do
           ~F"""
@@ -314,6 +304,63 @@ defmodule Surface.Components.ContextTest do
 
       assert html =~ "Prop with scope: field from prop with scope"
       assert html =~ "Prop without scope: field from prop without scope"
+    end
+  end
+
+  describe "get in live component update/2" do
+    defmodule LiveComponentGetFromContextWithUpdate do
+      use Surface.LiveComponent
+
+      alias Surface.Components.ContextTest.Outer
+
+      slot default
+      data data_with_scope, :any
+      data data_without_scope, :any
+
+      @impl true
+      def update(assigns, socket) do
+        socket =
+          socket
+          |> assign(assigns)
+          |> assign(:data_with_scope, Context.get(socket, Outer, :field))
+          |> assign(:data_without_scope, Context.get(socket, :field))
+          |> Context.put(field: "updated field")
+
+        {:ok, socket}
+      end
+
+      @impl true
+      def render(assigns) do
+        ~F"""
+        <div>
+          Data with scope: {@data_with_scope}
+          Data without scope: {@data_without_scope}
+          <#slot />
+        </div>
+        """
+      end
+    end
+
+    test "can get and update context in update" do
+      html =
+        render_surface do
+          ~F"""
+          <div>
+            <Outer>
+              <LiveComponentGetFromContextWithUpdate id="1"/>
+            </Outer>
+            <Context put={field: "field without scope"}>
+              <LiveComponentGetFromContextWithUpdate id="2">
+                <RenderContext/>
+              </LiveComponentGetFromContextWithUpdate>
+            </Context>
+          </div>
+          """
+        end
+
+      assert html =~ "Data with scope: field from Outer"
+      assert html =~ "Data without scope: field without scope"
+      assert html =~ "updated field"
     end
   end
 
@@ -377,6 +424,15 @@ defmodule Surface.Components.ContextTest do
 
       assert_raise ArgumentError, msg, fn ->
         Context.put(%{}, SomeScope, value: 1)
+      end
+    end
+
+    test "put/3 throws ArgumentError argument error if the subject is not a socket/assigns, even with `__context__` key" do
+      msg =
+        "put/3 expects a socket or an assigns map from a function component as first argument, got: %{__context__: %{}}"
+
+      assert_raise ArgumentError, msg, fn ->
+        Context.put(%{__context__: %{}}, SomeScope, value: 1)
       end
     end
 
@@ -778,14 +834,20 @@ defmodule Surface.Components.ContextTest do
       prop count, :integer, default: 1
 
       data field, :any
+      data item, :any
+      data rest, :list
 
       def render(%{list: [item | rest]} = assigns) do
-        assigns = Context.copy_assign(assigns, {ContextTest.Outer, :field})
+        assigns =
+          assigns
+          |> Context.copy_assign({ContextTest.Outer, :field})
+          |> assign(:item, item)
+          |> assign(:rest, rest)
 
         ~F"""
-        {@count}. {item} - {@field}
+        {@count}. {@item} - {@field}
         <Context put={ContextTest.Outer, field: "#{@field} #{@count}"}>
-          <Recursive list={rest} count={@count + 1}/>
+          <Recursive list={@rest} count={@count + 1}/>
         </Context>
         """
       end
@@ -807,28 +869,6 @@ defmodule Surface.Components.ContextTest do
              1. a - field from Outer
                2. b - field from Outer 1
                3. c - field from Outer 1 2
-             """
-    end
-
-    test "using form and field stored in the context" do
-      alias Surface.Components.Form
-
-      html =
-        render_surface do
-          ~F"""
-          <Form for={:parent} opts={csrf_token: "test"}>
-            <InputsWithNestedField/>
-          </Form>
-          """
-        end
-
-      assert html =~ """
-             <form action="#" method="post">
-                 <input name="_csrf_token" type="hidden" value="test">
-               <div>
-                 <input id="parent_children_name" name="parent[children][name]" type="text">
-             </div>
-             </form>
              """
     end
   end
@@ -995,7 +1035,7 @@ defmodule Surface.Components.ContextTest do
 
   describe "dead views" do
     defmodule DeadView do
-      use Phoenix.View, root: "support/dead_views"
+      use Phoenix.Template, root: "support/dead_views"
       import Surface
 
       def render("index.html", assigns) do
@@ -1008,7 +1048,7 @@ defmodule Surface.Components.ContextTest do
     end
 
     defmodule DeadViewNamedSlots do
-      use Phoenix.View, root: "support/dead_views"
+      use Phoenix.Template, root: "support/dead_views"
       import Surface
 
       def render("index.html", assigns) do
@@ -1027,11 +1067,11 @@ defmodule Surface.Components.ContextTest do
     test "pass context down the tree of components" do
       expected = ~S(<span id="field">field from Outer</span>)
 
-      assert Phoenix.View.render_to_string(DeadView, "index.html", []) =~ expected
+      assert Phoenix.Template.render_to_string(DeadView, "index", "html", []) =~ expected
     end
 
     test "pass context to named slots" do
-      assert Phoenix.View.render_to_string(DeadViewNamedSlots, "index.html", []) =~
+      assert Phoenix.Template.render_to_string(DeadViewNamedSlots, "index", "html", []) =~
                "field from OuterWithNamedSlots"
     end
   end
@@ -1257,7 +1297,7 @@ defmodule Surface.Components.ContextTest do
         ~F"""
         <div>
           <Context
-            get={Surface.Components.Form, form: form}
+            get={form: form}
           >
             Hello!
           </Context>

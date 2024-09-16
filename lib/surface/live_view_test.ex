@@ -19,10 +19,9 @@ defmodule Surface.LiveViewTest do
     quote do
       import Phoenix.ConnTest
       import Phoenix.LiveViewTest
-      import Phoenix.LiveView.Helpers, only: [live_component: 2, live_component: 3]
       import Surface, only: [sigil_F: 2]
       import Surface.LiveViewTest
-      require Phoenix.LiveView.HTMLEngine
+      require Phoenix.LiveView.TagEngine
     end
   end
 
@@ -61,7 +60,7 @@ defmodule Surface.LiveViewTest do
       quote do
         %{
           __slot__: :inner_block,
-          inner_block: Phoenix.LiveView.HTMLEngine.inner_block(:inner_block, do: unquote(clauses))
+          inner_block: Phoenix.LiveView.TagEngine.inner_block(:inner_block, do: unquote(clauses))
         }
       end
 
@@ -249,7 +248,7 @@ defmodule Surface.LiveViewTest do
   defmacro catalogue_test(module_or_all, opts \\ []) do
     module_or_all = Macro.expand(module_or_all, __CALLER__)
     except = Keyword.get(opts, :except, []) |> Enum.map(&Macro.expand(&1, __CALLER__))
-    {examples, playgrounds} = get_examples_and_playgrouds(module_or_all, except)
+    {examples, playgrounds} = get_examples_and_playgrouds(module_or_all, except, __CALLER__)
 
     playground_tests =
       for view <- playgrounds do
@@ -333,19 +332,38 @@ defmodule Surface.LiveViewTest do
     |> String.replace(~r/\n\s+\n/, "\n")
   end
 
-  defp get_examples_and_playgrouds(module_or_all, except) do
+  defp get_examples_and_playgrouds(module_or_all, except, caller) do
     components =
       case {module_or_all, except} do
         {:all, []} ->
           Surface.components(only_current_project: true)
 
         {:all, except} ->
+          except_components =
+            Enum.filter(except, fn module ->
+              case Surface.Compiler.Helpers.validate_component_module(module, to_string(module)) do
+                {:error, message} ->
+                  Surface.IOHelper.warn(message, caller)
+                  false
+
+                :ok ->
+                  true
+              end
+            end)
+
           Surface.components(only_current_project: true)
-          |> Enum.filter(fn c -> Surface.Catalogue.get_metadata(c)[:subject] not in except end)
+          |> Enum.filter(fn c -> Surface.Catalogue.get_metadata(c)[:subject] not in except_components end)
 
         {module, _} when is_atom(module) ->
-          Surface.components(only_current_project: true)
-          |> Enum.filter(fn c -> Surface.Catalogue.get_metadata(c)[:subject] == module end)
+          case Surface.Compiler.Helpers.validate_component_module(module, to_string(module)) do
+            {:error, message} ->
+              Surface.IOHelper.warn(message, caller)
+              []
+
+            :ok ->
+              Surface.components(only_current_project: true)
+              |> Enum.filter(fn c -> Surface.Catalogue.get_metadata(c)[:subject] == module end)
+          end
 
         {value, _} ->
           raise(ArgumentError, "catalogue_test/1 expects either a module or `:all`, got #{inspect(value)}")
@@ -362,7 +380,8 @@ defmodule Surface.LiveViewTest do
 
   @doc false
   defmacro assert_raise_with_line(exception, message, relative_line, function) do
-    {:fn, _, [{:->, [line: function_start_line], _}]} = function
+    {:fn, _, [{:->, meta, _}]} = function
+    function_start_line = meta[:line]
     expected_line = function_start_line + relative_line
     expected_file = __CALLER__.file |> Path.relative_to_cwd()
 

@@ -144,11 +144,18 @@ defmodule Surface.ComponentTest do
 
     prop list, :list
     prop count, :integer, default: 1
+    data item, :any
+    data rest, :list
 
     def render(%{list: [item | rest]} = assigns) do
+      assigns =
+        assigns
+        |> assign(:item, item)
+        |> assign(:rest, rest)
+
       ~F"""
-      {@count}. {item}
-      <Recursive list={rest} count={@count + 1}/>
+      {@count}. {@item}
+      <Recursive list={@rest} count={@count + 1}/>
       """
     end
 
@@ -337,7 +344,7 @@ defmodule Surface.ComponentTest do
 
   describe "components in dead views" do
     defmodule DeadView do
-      use Phoenix.View, root: "support/dead_views"
+      use Phoenix.Template, root: "support/dead_views"
       import Surface
 
       def render("index.html", assigns) do
@@ -348,7 +355,7 @@ defmodule Surface.ComponentTest do
     end
 
     test "renders the component" do
-      assert Phoenix.View.render_to_string(DeadView, "index.html", []) =~
+      assert Phoenix.Template.render_to_string(DeadView, "index", "html", []) =~
                """
                <div><div class="myclass">
                  <span>My label</span>

@@ -7,6 +7,7 @@ defmodule Surface.Compiler.EExEngine do
   for information on this). Finally, it passes these tokens into the engine sequentially in the same
   manner as EEx.Compiler.compile/2
   """
+  alias Surface.Compiler.Helpers
   alias Surface.AST
   alias Surface.IOHelper
   alias Surface.Components.Context
@@ -27,10 +28,12 @@ defmodule Surface.Compiler.EExEngine do
       engine: opts[:engine] || @default_engine,
       depth: 0,
       context_vars: %{count: 0, changed: []},
-      scope: []
+      scope: [],
+      root_tag?: root_tag?(nodes)
     }
 
     nodes
+    |> maybe_annotate_content(opts[:annotate_content], opts[:caller])
     |> to_token_sequence()
     |> generate_buffer(state.engine.init(opts), state)
     |> maybe_print_expression(
@@ -38,6 +41,32 @@ defmodule Surface.Compiler.EExEngine do
       opts[:file] || "nofile",
       opts[:line] || 1
     )
+  end
+
+  defp maybe_annotate_content(nodes, annotate_content, caller) do
+    case annotate_content && annotate_content.(caller) do
+      {before_comment, after_comment} ->
+        [%AST.Literal{value: before_comment}] ++ nodes ++ [%AST.Literal{value: after_comment}]
+
+      _ ->
+        nodes
+    end
+  end
+
+  defp root_tag?(nodes) do
+    Enum.reduce_while(nodes, false, fn
+      %AST.Tag{}, false ->
+        {:cont, true}
+
+      %AST.Tag{}, true ->
+        {:halt, false}
+
+      %AST.Literal{value: value}, acc ->
+        if Helpers.blank?(value), do: {:cont, acc}, else: {:halt, false}
+
+      _node, _acc ->
+        {:halt, false}
+    end)
   end
 
   defp to_token_sequence(nodes) do
@@ -48,10 +77,10 @@ defmodule Surface.Compiler.EExEngine do
   end
 
   defp generate_buffer([], buffer, state) do
-    ast = state.engine.handle_body(buffer, root: true)
+    ast = state.engine.handle_body(buffer, root: state.root_tag?)
 
     quote do
-      require Phoenix.LiveView.HTMLEngine
+      require Phoenix.LiveView.TagEngine
       unquote(ast)
     end
   end
@@ -265,7 +294,7 @@ defmodule Surface.Compiler.EExEngine do
     static_props_map = {:%{}, [], slot_props ++ static_props}
 
     quote do
-      Phoenix.LiveView.HTMLEngine.component(
+      Phoenix.LiveView.TagEngine.component(
         &apply(unquote(module_expr), unquote(fun_expr), [&1]),
         Map.merge(
           Surface.build_dynamic_assigns(
@@ -281,6 +310,7 @@ defmodule Surface.Compiler.EExEngine do
         {__MODULE__, __ENV__.function, __ENV__.file, unquote(meta.line)}
       )
     end
+    |> tag_slots(component)
     |> maybe_print_expression(component)
   end
 
@@ -295,7 +325,7 @@ defmodule Surface.Compiler.EExEngine do
     static_props_map = {:%{}, [], slot_props ++ static_props}
 
     quote do
-      Phoenix.LiveView.HTMLEngine.component(
+      Phoenix.LiveView.TagEngine.component(
         &(unquote(Macro.var(fun, __MODULE__)) / 1),
         Map.merge(
           Surface.build_assigns(
@@ -311,6 +341,7 @@ defmodule Surface.Compiler.EExEngine do
         {__MODULE__, __ENV__.function, __ENV__.file, unquote(meta.line)}
       )
     end
+    |> tag_slots(component)
     |> maybe_print_expression(component)
   end
 
@@ -330,7 +361,7 @@ defmodule Surface.Compiler.EExEngine do
     module_for_build_assigns = if fun == :render, do: module
 
     quote do
-      Phoenix.LiveView.HTMLEngine.component(
+      Phoenix.LiveView.TagEngine.component(
         &(unquote(module).unquote(fun) / 1),
         Map.merge(
           Surface.build_assigns(
@@ -346,6 +377,7 @@ defmodule Surface.Compiler.EExEngine do
         {__MODULE__, __ENV__.function, __ENV__.file, unquote(meta.line)}
       )
     end
+    |> tag_slots(component)
     |> maybe_print_expression(component)
   end
 
@@ -360,7 +392,7 @@ defmodule Surface.Compiler.EExEngine do
     static_props_map = {:%{}, [], static_props ++ slot_props}
 
     quote do
-      Phoenix.LiveView.HTMLEngine.component(
+      Phoenix.LiveView.TagEngine.component(
         &unquote(module).render/1,
         Map.merge(
           Surface.build_assigns(
@@ -376,6 +408,7 @@ defmodule Surface.Compiler.EExEngine do
         {__MODULE__, __ENV__.function, __ENV__.file, unquote(meta.line)}
       )
     end
+    |> tag_slots(component)
     |> maybe_print_expression(component)
   end
 
@@ -390,7 +423,7 @@ defmodule Surface.Compiler.EExEngine do
     static_props_map = {:%{}, [], slot_props ++ static_props}
 
     quote do
-      Phoenix.LiveView.HTMLEngine.component(
+      Phoenix.LiveView.TagEngine.component(
         &unquote(module).render/1,
         Map.merge(
           Surface.build_assigns(
@@ -406,6 +439,7 @@ defmodule Surface.Compiler.EExEngine do
         {__MODULE__, __ENV__.function, __ENV__.file, unquote(meta.line)}
       )
     end
+    |> tag_slots(component)
     |> maybe_print_expression(component)
   end
 
@@ -420,7 +454,7 @@ defmodule Surface.Compiler.EExEngine do
     static_props_map = {:%{}, [], [{:module, module} | slot_props] ++ static_props}
 
     quote do
-      Phoenix.LiveView.HTMLEngine.component(
+      Phoenix.LiveView.TagEngine.component(
         &Phoenix.Component.live_component/1,
         Map.merge(
           Surface.build_assigns(
@@ -436,6 +470,7 @@ defmodule Surface.Compiler.EExEngine do
         {__MODULE__, __ENV__.function, __ENV__.file, unquote(meta.line)}
       )
     end
+    |> tag_slots(component)
     |> maybe_print_expression(component)
   end
 
@@ -454,7 +489,7 @@ defmodule Surface.Compiler.EExEngine do
     static_props_map = {:%{}, [], [{:module, module_expr} | slot_props] ++ static_props}
 
     quote do
-      Phoenix.LiveView.HTMLEngine.component(
+      Phoenix.LiveView.TagEngine.component(
         &Phoenix.Component.live_component/1,
         Map.merge(
           Surface.build_dynamic_assigns(
@@ -470,6 +505,7 @@ defmodule Surface.Compiler.EExEngine do
         {__MODULE__, __ENV__.function, __ENV__.file, unquote(meta.line)}
       )
     end
+    |> tag_slots(component)
     |> maybe_print_expression(component)
   end
 
@@ -547,7 +583,7 @@ defmodule Surface.Compiler.EExEngine do
 
           inner_block =
             quote do
-              Phoenix.LiveView.HTMLEngine.inner_block(unquote(slot_name), do: unquote(block))
+              Phoenix.LiveView.TagEngine.inner_block(unquote(slot_name), do: unquote(block))
             end
 
           props = [__slot__: slot_name, inner_block: inner_block] ++ props
@@ -624,13 +660,16 @@ defmodule Surface.Compiler.EExEngine do
                 unquote(let),
                 unquote(no_warnings_generator),
                 unquote(context_var)
-              } ->
+              }
+              when unquote(context_var) != nil ->
+                # `unquote(context_var) != nil` is to avoid unused variable warning
+                # this kind of context will be removed in the future
                 unquote(body)
 
               {
                 argument,
                 generator_value,
-                unquote(context_var)
+                _
               } ->
                 unquote(validate_let_ast)
                 unquote(validate_generator_ast)
@@ -638,7 +677,7 @@ defmodule Surface.Compiler.EExEngine do
 
           ast =
             quote do
-              Phoenix.LiveView.HTMLEngine.inner_block(unquote(name), do: unquote(block))
+              Phoenix.LiveView.TagEngine.inner_block(unquote(name), do: unquote(block))
             end
 
           props = [__slot__: name, inner_block: ast] ++ props
@@ -1086,25 +1125,18 @@ defmodule Surface.Compiler.EExEngine do
     end
   end
 
-  defp require_expr(module, line) do
-    %AST.Expr{
-      value:
-        quote line: line do
-          require(unquote(module)).__info__(:module)
-        end,
-      meta: %AST.Meta{}
-    }
-  end
-
   defp escape_message(message) do
     {:safe, message_iodata} = Phoenix.HTML.html_escape(message)
     IO.iodata_to_binary(message_iodata)
   end
 
-  defp context_name(count, caller) do
+  defp context_name(count) do
     "context_#{count}"
     |> String.to_atom()
-    |> Macro.var(caller.module)
+    # don't assign context to pretend it's a user defined variable
+    # this will trigger updates for components using context
+    # see: https://github.com/phoenixframework/phoenix_live_view/commit/3d5fab2fbb265d55a9a695132a6c8717ace0c971#diff-0a72359110b9a777449f08e30231b039e8fe115f2b40bed06156064fd06a1b2aR999
+    |> Macro.var(nil)
   end
 
   defp store_component_call(module, node_alias, component, props, directives, line, dep_type)
@@ -1186,7 +1218,7 @@ defmodule Surface.Compiler.EExEngine do
         initial_context
       end
 
-    context_var = context_name(state.context_vars.count, caller)
+    context_var = context_name(state.context_vars.count)
 
     state =
       if changes_context? do
@@ -1412,5 +1444,21 @@ defmodule Surface.Compiler.EExEngine do
   defp get_propagate_context_to_slots_map(caller) do
     Module.get_attribute(caller.module, :propagate_context_to_slots_map) ||
       Surface.BaseComponent.build_propagate_context_to_slots_map()
+  end
+
+  defp tag_slots({call, meta, args}, %AST.FunctionComponent{slot_entries: slot_entries}) do
+    slots =
+      Enum.map(slot_entries, fn
+        {:default, _} -> :inner_block
+        {name, _} -> name
+      end)
+
+    {call, [slots: slots] ++ meta, args}
+  end
+
+  defp tag_slots({call, meta, args}, %{slot_entries: slot_entries}) do
+    slots = Enum.map(slot_entries, fn {name, _} -> name end)
+
+    {call, [slots: slots] ++ meta, args}
   end
 end

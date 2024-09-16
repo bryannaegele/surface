@@ -5,6 +5,8 @@ on:
   push:
     branches:
       - main
+      - v0.11
+      - v0.9
 
 jobs:
   mix_test:
@@ -14,40 +16,66 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - elixir: 1.12.3
-            otp: 23.3
-          - elixir: 1.12.3
-            otp: 24.0
-          - elixir: 1.13.4
-            otp: 24.0
-          - elixir: 1.13.4
-            otp: 25.0
-            check_formatted: true
+          - elixir: '1.13.4'
+            otp: '24.0'
+            blend: phoenix_live_view_0_19
+          - elixir: '1.13.4'
+            otp: '25.0'
             run_plugin_tests: true
             warnings_as_errors: true
-          - elixir: 1.14.0
-            otp: 25.0
+          - elixir: '1.14.0'
+            otp: '25.0'
+            run_plugin_tests: true
+            run_integration_tests: true
+            warnings_as_errors: true
+          - elixir: '1.15.2'
+            otp: '26.0'
+            run_plugin_tests: true
+            run_integration_tests: true
+            warnings_as_errors: true
+          - elixir: '1.16.0'
+            otp: '26.2.1'
             check_formatted: true
             run_plugin_tests: true
+            run_integration_tests: true
             warnings_as_errors: true
+          - elixir: '1.16.0'
+            otp: '26.2.1'
+            update_deps: true
+            run_plugin_tests: true
     env:
       MIX_ENV: test
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - uses: erlef/setup-beam@v1
         with:
           otp-version: ${{matrix.otp}}
           elixir-version: ${{matrix.elixir}}
+      - name: Set lock file from blend
+        if: matrix.blend
+        run: cp blend/${{matrix.blend}}.mix.lock mix.lock
+      - name: Update deps
+        if: matrix.update_deps
+        run: mix deps.update --all
+      - name: Deps and _build cache
+        uses: actions/cache@v4
+        id: deps-cache
+        with:
+          path: |
+              deps
+              _build
+          key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.otp }}-${{ matrix.elixir }}-${{ hashFiles('mix.lock') }}
       - name: Install Dependencies
+        if: steps.deps-cache.outputs.cache-hit != 'true'
         run: |
           mix local.hex --force
           mix local.rebar --force
           mix deps.get --only test
+      - run: mix deps.compile
+        if: steps.deps-cache.outputs.cache-hit != 'true'
       - run: mix format --check-formatted
         if: matrix.check_formatted
       - run: mix compile --warnings-as-errors
         if: matrix.warnings_as_errors
-      - run: mix test
-        if: matrix.run_plugin_tests
-      - run: mix test --exclude plugin
-        if: ${{ !matrix.run_plugin_tests }}
+      - name: mix test
+        run: mix test --include integration:${{ !!matrix.run_integration_tests }} --exclude plugin:${{ !matrix.run_plugin_tests }}
